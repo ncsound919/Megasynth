@@ -52,7 +52,7 @@ export interface SynthParams {
   lfoRate: number;        // Hz (0.1 - 20)
   lfoDepth: number;       // Intensity (0 - 1)
   lfoType: 'sine' | 'triangle' | 'sawtooth' | 'square';
-  lfoTarget: 'cutoff' | 'pitch' | 'volume' | 'none';
+  lfoTarget: 'cutoff' | 'pitch' | 'volume' | 'pulseWidth' | 'none';
   fineTune: number;       // Cents (-100 to 100)
   transpose: number;      // Semitones (-24 to 24)
   glide: number;          // Portamento time (0 to 1s)
@@ -82,6 +82,7 @@ export interface SynthParams {
   oscType2?: 'sine' | 'triangle' | 'sawtooth' | 'square' | 'sub_oct' | 'none';
   oscDetune?: number;      // Cents (0 - 100)
   osc2Volume?: number;     // Volume ratio (0 - 1)
+  pulseWidth?: number;     // Duty cycle for pwm/sid_pulse/nes_pulse osc1 types (0-1, 0.5 = square)
   noiseVolume?: number;    // White noise level (0 - 1)
   wowFlutter?: number;     // Mellotron wow & flutter (0 - 100)
   tapeNoise?: number;      // Mellotron mechanical tape background noise (0 - 100)
@@ -256,6 +257,28 @@ export const DEFAULT_FX_STATE: FXChainState = {
   order: ['chip', 'distortion', 'chorus', 'flanger', 'delay', 'reverb'],
 };
 
+/**
+ * State for one auxiliary bus (bus1-4). Channels send to these pre- or
+ * post-fader via ChannelState.bus1..bus4 (existing boolean toggles).
+ * This is the RETURN side: level/mute/pan for what comes back into the
+ * master mix. Without this, a channel's bus send had a source (the
+ * boolean toggle) but no destination — audio sent to a bus vanished.
+ */
+export interface BusSendState {
+  id: 'bus1' | 'bus2' | 'bus3' | 'bus4';
+  label: string;
+  returnLevel: number;   // 0-1.2, gain applied on the way back into master
+  muted: boolean;
+  pan: number;            // -1 to 1
+}
+
+export const DEFAULT_BUS_SENDS: BusSendState[] = [
+  { id: 'bus1', label: 'Bus 1', returnLevel: 1, muted: false, pan: 0 },
+  { id: 'bus2', label: 'Bus 2', returnLevel: 1, muted: false, pan: 0 },
+  { id: 'bus3', label: 'Bus 3', returnLevel: 1, muted: false, pan: 0 },
+  { id: 'bus4', label: 'Bus 4', returnLevel: 1, muted: false, pan: 0 },
+];
+
 export interface MasterState {
   volume: number;
   neveDrive: number;
@@ -269,6 +292,7 @@ export interface MasterState {
   sidechainSource: string;
   fx: FXChainState;
   bpm: number;
+  busSends: BusSendState[];
 }
 
 export interface SequenceStep {
