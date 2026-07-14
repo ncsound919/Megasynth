@@ -31,6 +31,7 @@ export class ChannelStripEngine {
   private grMeterNode: AudioWorkletNode | null = null;
   private meterNode: AudioWorkletNode | null = null;
   public analyser: AnalyserNode;
+  private disposed = false;
 
   public onMeter?: (rms: number, peak: number, peakHold: number, clipping: boolean) => void;
   public onGainReduction?: (grDb: number) => void;
@@ -47,6 +48,7 @@ export class ChannelStripEngine {
     this.outputRoutes = outputRoutes;
 
     this.inputGain = ctx.createGain();
+    this.inputGain.gain.value = 1; // unity by default; driven by state.inputTrim in applyState
     this.analyser = ctx.createAnalyser();
     this.analyser.fftSize = 2048;
 
@@ -109,17 +111,23 @@ export class ChannelStripEngine {
     this.meterNode = new AudioWorkletNode(this.ctx, 'meter-processor');
     this.muteGain.connect(this.meterNode);
     this.meterNode.port.onmessage = (e) => {
+      if (this.disposed) return;
       const { rms, peak, peakHold, clipping } = e.data;
       this.onMeter?.(rms, peak, peakHold, clipping);
-      
-      // Dynamic EQ update loop
-      if (this.lastState && this.lastState.eq.some(b => b.dynEnabled)) {
+
+      // Dynamic EQ update loop. Guarded by _applyingState so this never
+      // races with applyState's own writes to the same filter.gain
+      // AudioParams — without the guard, whichever call landed last would
+      // silently override the other's target value on every meter tick,
+      // producing zipper noise / fighting automation on dynamic EQ bands.
+      if (!this._applyingState && this.lastState && this.lastState.eq.some(b => b.dynEnabled)) {
         this._updateDynamicEQ(rms);
       }
     };
   }
 
   private lastState: ChannelState | null = null;
+  private _applyingState = false;
 
   private _updateDynamicEQ(widebandRms: number) {
     const t = this.ctx.currentTime;
@@ -149,15 +157,26 @@ export class ChannelStripEngine {
       await this.ctx.audioWorklet.addModule('/worklets/gr-meter-processor.js');
     } catch {}
     this.grMeterNode = new AudioWorkletNode(this.ctx, 'gr-meter-processor');
-    this.eqFilters[this.eqFilters.length - 1].connect(this.grMeterNode); // taps signal pre-compressor
+    // Correct tap point: filters are wired in series so the last array
+    // element is always the true end of the chain (post-EQ, pre-compressor)
+    // regardless of how many bands are active — unused bands are forced
+    // transparent in applyState, so this doesn't depend on eqFilters.length.
+    this.eqFilters[this.eqFilters.length - 1].connect(this.grMeterNode);
     this.grMeterNode.port.onmessage = (e) => {
       this.onGainReduction?.(e.data.gainReductionDb);
     };
   }
 
   applyState(state: ChannelState) {
+    if (this.disposed) return;
+    this._applyingState = true;
     this.lastState = state;
     const t = this.ctx.currentTime;
+
+    // Input trim — real gain applied pre-EQ. Falls back to unity if the state
+    // shape doesn't (yet) carry inputTrim, so this stays backward compatible.
+    const inputTrim = (state as ChannelState & { inputTrim?: number }).inputTrim ?? 1;
+    this.inputGain.gain.setTargetAtTime(inputTrim, t, 0.01);
 
     // Fader — real gain applied to the actual audio path
     this.fader.gain.setTargetAtTime(state.volume, t, 0.01);
@@ -218,15 +237,47 @@ export class ChannelStripEngine {
 
     // Output routing — real reconnection to the chosen destination
     if (state.outputRoute !== this.currentRoute) {
-      try { this.muteGain.disconnect(this.outputRoutes[this.currentRoute]); } catch(e) {}
+      try {
+        this.muteGain.disconnect(this.outputRoutes[this.currentRoute]);
+      } catch (err) {
+        // Expected: disconnect(node) throws InvalidAccessError if that
+        // specific edge was never connected. Anything else (e.g. the
+        // destination node itself was already torn down elsewhere) is a
+        // real routing bug and should not vanish silently.
+        if (!(err instanceof DOMException && err.name === 'InvalidAccessError')) {
+          console.error(`ChannelStripEngine[${this.id}]: failed to disconnect route "${this.currentRoute}"`, err);
+        }
+      }
       this.muteGain.connect(this.outputRoutes[state.outputRoute]);
       this.currentRoute = state.outputRoute;
     }
+
+    this._applyingState = false;
   }
 
   dispose() {
+    // Node.disconnect() only detaches that node's own outgoing edges — it
+    // does not cascade. The previous version only disconnected inputGain,
+    // meterNode, and grMeterNode, leaving every downstream node (EQ filters,
+    // compressor, panner, fader, muteGain, bus sends, analyser) still wired
+    // and still processing audio/holding worklet/timer resources for the
+    // lifetime of the AudioContext. Every node in the chain must be
+    // disconnected explicitly.
+    this.disposed = true;
+
+    if (this.meterNode) this.meterNode.port.onmessage = null;
     this.meterNode?.disconnect();
+    if (this.grMeterNode) this.grMeterNode.port.onmessage = null;
     this.grMeterNode?.disconnect();
+
     this.inputGain.disconnect();
+    this.analyser.disconnect();
+    this.eqFilters.forEach((f) => f.disconnect());
+    this.compressor.disconnect();
+    this.compressorMakeup.disconnect();
+    this.panner.disconnect();
+    this.fader.disconnect();
+    this.muteGain.disconnect();
+    Object.values(this.busSends).forEach((g) => g.disconnect());
   }
 }
