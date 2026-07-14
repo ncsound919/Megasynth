@@ -1,0 +1,6 @@
+{
+  "name": "K-LOADER: Hybrid Rompler & Synth",
+  "description": "A high-fidelity hybrid synthesizer and rompler engine inspired by elite workstation tools. Features multi-sample library loading, dual-oscillator synthesis, vintage hardware emulation, and classic filter modeling.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
