@@ -257,11 +257,15 @@ export const KontaktSynth: React.FC<KontaktSynthProps> = ({
   }, [engine]);
 
   const { peakLevels, peakLEDs, masterGrDb, masterOutput, analysers } = useMixerEngine({
-    audioContext: engine?.ctx as AudioContext,
+    audioContext: engine?.context as AudioContext,
     channelSources,
     channels: mixerChannels,
     master: masterState,
-    destination: engine?.ctx?.destination as AudioNode
+    // Feed the mixer's summed master signal into the engine's FX chain / master
+    // saturation stage (which already terminates at ctx.destination internally),
+    // rather than straight to hardware output — otherwise that whole FX rack
+    // silently processes nothing while still appearing to respond to knobs.
+    destination: engine?.masterFXInput as AudioNode
   });
 
   const handleParamChange = useCallback((key: keyof SynthParams, val: any) => {
@@ -682,7 +686,7 @@ export const KontaktSynth: React.FC<KontaktSynthProps> = ({
               peakLEDs={peakLEDs}
               masterGainReductionDb={masterGrDb}
               analysers={analysers}
-              audioContext={engine?.ctx as AudioContext}
+              audioContext={engine?.context as AudioContext}
             />
           </div>
         )}

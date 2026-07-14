@@ -118,7 +118,7 @@ export const FXSection: React.FC<FXSectionProps> = ({ state, bpm, onStateChange,
             >
               <div className="flex items-center gap-4">
                 <div className="p-3 bg-blue-500/10 rounded-xl border border-blue-500/20">
-                  {React.cloneElement(getIcon(activeStage) as React.ReactElement, { className: "w-8 h-8 text-blue-500" })}
+                  {React.cloneElement(getIcon(activeStage) as React.ReactElement<{ className?: string }>, { className: "w-8 h-8 text-blue-500" })}
                 </div>
                 <div>
                   <h2 className="text-2xl font-bold font-mono uppercase tracking-tighter leading-none">{activeStage}</h2>

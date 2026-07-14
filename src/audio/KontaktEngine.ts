@@ -240,6 +240,27 @@ export class KontaktEngine {
   /**
    * Helper to compute active running voices
    */
+  /**
+   * Read-only access to the shared AudioContext, needed by UI-level consumers
+   * (e.g. the mixer's metering analysers) without exposing the private field itself.
+   */
+  public get context(): AudioContext {
+    return this.ctx;
+  }
+
+  /**
+   * Entry point into the engine's built-in master FX chain (distortion, chorus,
+   * flanger, delay, reverb, chip emulation) and master saturation/width stage.
+   * Normally fed by the internal channel panners, but once an external mixer
+   * takes over routing via disconnectInternalRouting(), that feed goes silent —
+   * an external mixer's summed output must be connected here instead, or the
+   * FX chain and master saturation process no signal despite still being live
+   * and still accepting parameter updates via updateMasterFX()/updateEffects().
+   */
+  public get masterFXInput(): AudioNode {
+    return this.finalOutput;
+  }
+
   public getActiveVoicesCount(): number {
     let count = 0;
     this.activeVoices.forEach(voices => {
@@ -1274,4 +1295,3 @@ export class KontaktEngine {
     return presets[name] || null;
   }
 }
-

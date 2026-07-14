@@ -12,9 +12,44 @@ interface KnobProps {
   color?: string;
   /** Optional: hold Shift for fine‑tune (10× resolution) */
   shiftFine?: boolean;
+  /** Visual size variant. Defaults to 'medium'. */
+  size?: 'small' | 'medium' | 'large';
 }
 
 const DEFAULT_COLOR = '#f97316'; // orange-500
+
+const SIZE_CONFIG = {
+  small: {
+    container: 'w-12',
+    knob: 'w-8 h-8',
+    viewBoxSize: 32,
+    radius: 13,
+    indicator: 'w-0.5 h-2.5 top-0.5',
+    cap: 'w-3 h-3',
+    label: 'text-[7px]',
+    readout: 'text-[8px]',
+  },
+  medium: {
+    container: 'w-16',
+    knob: 'w-10 h-10',
+    viewBoxSize: 40,
+    radius: 17,
+    indicator: 'w-0.5 h-3 top-1',
+    cap: 'w-4 h-4',
+    label: 'text-[8px]',
+    readout: 'text-[9px]',
+  },
+  large: {
+    container: 'w-20',
+    knob: 'w-14 h-14',
+    viewBoxSize: 56,
+    radius: 24,
+    indicator: 'w-1 h-4 top-1.5',
+    cap: 'w-5 h-5',
+    label: 'text-[9px]',
+    readout: 'text-[10px]',
+  },
+} as const;
 
 /**
  * Converts any CSS colour string to an rgba() form suitable for box‑shadow.
@@ -51,7 +86,9 @@ export const Knob: React.FC<KnobProps> = ({
   decimals = 0,
   color = DEFAULT_COLOR,
   shiftFine = true,
+  size = 'medium',
 }) => {
+  const sz = SIZE_CONFIG[size];
   const knobRef = useRef<HTMLDivElement>(null);
   const [isDragging, setIsDragging] = useState(false);
   const startYRef = useRef(0);
@@ -143,7 +180,7 @@ export const Knob: React.FC<KnobProps> = ({
   // ================== Value display & arc ==================
   const pct = (value - min) / (max - min || 1);
   const angle = -135 + pct * 270; // rotation in degrees
-  const radius = 17; // SVG circle radius
+  const radius = sz.radius; // SVG circle radius, scaled per size variant
   const circumference = 2 * Math.PI * radius;
   const filledLength = pct * circumference * 0.75; // 270° = 0.75 of full circle
 
@@ -155,11 +192,11 @@ export const Knob: React.FC<KnobProps> = ({
 
   return (
     <div
-      className="flex flex-col items-center select-none group w-16"
+      className={`flex flex-col items-center select-none group ${sz.container}`}
       onWheel={handleWheel}
     >
       {/* Label */}
-      <span className="text-[8px] font-mono font-bold tracking-wider text-[#777] group-hover:text-white transition-colors uppercase mb-1 text-center truncate w-full">
+      <span className={`${sz.label} font-mono font-bold tracking-wider text-[#777] group-hover:text-white transition-colors uppercase mb-1 text-center truncate w-full`}>
         {label}
       </span>
 
@@ -179,7 +216,7 @@ export const Knob: React.FC<KnobProps> = ({
         onKeyDown={handleKeyDown}
         onFocus={() => setIsFocused(true)}
         onBlur={() => setIsFocused(false)}
-        className={`w-10 h-10 rounded-full bg-gradient-to-tr from-[#151515] to-[#252525] border border-[#2c2c2c] shadow-[0_3px_5px_rgba(0,0,0,0.6)] flex items-center justify-center cursor-ns-resize relative transition-all duration-150 ${
+        className={`${sz.knob} rounded-full bg-gradient-to-tr from-[#151515] to-[#252525] border border-[#2c2c2c] shadow-[0_3px_5px_rgba(0,0,0,0.6)] flex items-center justify-center cursor-ns-resize relative transition-all duration-150 ${
           isDragging ? 'scale-105' : 'group-hover:border-[#555]'
         } ${isFocused ? 'ring-1 ring-offset-1 ring-offset-black ring-gray-500' : ''}`}
         style={{
@@ -189,7 +226,7 @@ export const Knob: React.FC<KnobProps> = ({
       >
         {/* Rotatable indicator line */}
         <div
-          className="w-0.5 h-3 absolute top-1 origin-bottom rounded-full"
+          className={`${sz.indicator} absolute origin-bottom rounded-full`}
           style={{
             transform: `rotate(${angle}deg)`,
             backgroundColor: color,
@@ -197,23 +234,23 @@ export const Knob: React.FC<KnobProps> = ({
           }}
         />
         {/* Knob centre cap */}
-        <div className="w-4 h-4 rounded-full bg-[#121212] border border-[#222]" />
+        <div className={`${sz.cap} rounded-full bg-[#121212] border border-[#222]`} />
 
         {/* Arc track SVG */}
         <svg
           className="absolute inset-0 w-full h-full -rotate-90 pointer-events-none"
-          viewBox="0 0 40 40"
+          viewBox={`0 0 ${sz.viewBoxSize} ${sz.viewBoxSize}`}
         >
           {/* Background track */}
           <circle
-            cx="20" cy="20" r={radius}
+            cx={sz.viewBoxSize / 2} cy={sz.viewBoxSize / 2} r={radius}
             fill="none"
             stroke="#121212"
             strokeWidth="1.5"
           />
           {/* Filled arc */}
           <circle
-            cx="20" cy="20" r={radius}
+            cx={sz.viewBoxSize / 2} cy={sz.viewBoxSize / 2} r={radius}
             fill="none"
             stroke={color}
             strokeWidth="1.5"
@@ -227,7 +264,7 @@ export const Knob: React.FC<KnobProps> = ({
 
       {/* Numerical readout */}
       <span
-        className="text-[9px] font-mono text-[#aaa] font-semibold mt-1 tracking-tighter"
+        className={`${sz.readout} font-mono text-[#aaa] font-semibold mt-1 tracking-tighter`}
         style={{ color: isDragging ? color : '#aaa' }}
       >
         {value.toFixed(decimals)}{unit}

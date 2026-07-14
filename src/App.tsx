@@ -98,7 +98,7 @@ export default function App() {
     if (params) {
       // Update libraries state with new params
       setLibraries(libs => libs.map(l => l.id === activeLibId ? { ...l, params } : l));
-      kontaktEngine.updateParams(params);
+      kontaktEngine.updateEffects(params);
     }
   };
 
@@ -245,8 +245,13 @@ export default function App() {
   useEffect(() => {
     if (!kontaktEngine || !activeLibrary) return;
     
-    kontaktEngine.mappingMode = activeLibrary.mappingMode || 'chromatic';
-    kontaktEngine.loadLibrary(activeLibrary.name, activeLibrary.samples, activeLibrary.mappingMode || 'chromatic');
+    // 'hybrid' is a classification-report label (mixed drum/pitched library); the engine
+    // handles that mix per-sample via each sample's isDrum flag, so only pass it a mode it
+    // actually understands, falling back to 'chromatic' for anything else ('hybrid' included).
+    const engineMappingMode: 'chromatic' | 'oneshot' =
+      activeLibrary.mappingMode === 'oneshot' ? 'oneshot' : 'chromatic';
+    kontaktEngine.mappingMode = engineMappingMode;
+    kontaktEngine.loadLibrary(activeLibrary.name, activeLibrary.samples, engineMappingMode);
     
     activeLibrary.samples.forEach(sample => {
       if (sample.buffer) {
